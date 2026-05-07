@@ -68,163 +68,175 @@ const server = createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  if (req.method === "OPTIONS") {
-    res.writeHead(200);
-    res.end();
-    return;
-  }
+  try {
+    if (req.method === "OPTIONS") {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
 
-  // Root
-  if (pathname === "/") {
-    return await serveStatic(req, res, join(__dirname, "public", "index.html"));
-  }
+    // Root
+    if (pathname === "/") {
+      return await serveStatic(req, res, join(__dirname, "public", "index.html"));
+    }
 
-  // API: Get data
-  if (pathname === "/api/data" && req.method === "GET") {
-    const data = await getData();
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(data));
-    return;
-  }
+    // API: Get data
+    if (pathname === "/api/data" && req.method === "GET") {
+      const data = await getData();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(data));
+      return;
+    }
 
-  // API: Login (viewer)
-  if (pathname === "/api/login" && req.method === "POST") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", async () => {
-      try {
-        const { name, pin } = JSON.parse(body);
-        const data = await getData();
-        if (pin === data.viewerPin) {
-          const viewerId = Date.now().toString();
-          data.viewers[viewerId] = {
-            name,
-            loginTime: new Date().toISOString(),
-            progress: 0,
-            watchTime: 0,
-            completed: false,
-          };
-          await saveData(data);
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true, viewerId }));
-        } else {
-          res.writeHead(401, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Invalid PIN" }));
+    // API: Login (viewer)
+    if (pathname === "/api/login" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", async () => {
+        try {
+          const { name, pin } = JSON.parse(body);
+          const data = await getData();
+          if (pin === data.viewerPin) {
+            const viewerId = Date.now().toString();
+            data.viewers[viewerId] = {
+              name,
+              loginTime: new Date().toISOString(),
+              progress: 0,
+              watchTime: 0,
+              completed: false,
+            };
+            await saveData(data);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: true, viewerId }));
+          } else {
+            res.writeHead(401, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: "Invalid PIN" }));
+          }
+        } catch (err) {
+          console.error("Error in /api/login:", err);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Bad request" }));
         }
-      } catch {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: false, error: "Bad request" }));
-      }
-    });
-    return;
-  }
+      });
+      return;
+    }
 
-  // API: Admin login
-  if (pathname === "/api/admin-login" && req.method === "POST") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", async () => {
-      try {
-        const { password } = JSON.parse(body);
-        const data = await getData();
-        if (password === data.adminPassword) {
+    // API: Admin login
+    if (pathname === "/api/admin-login" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", async () => {
+        try {
+          const { password } = JSON.parse(body);
+          const data = await getData();
+          if (password === data.adminPassword) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: true }));
+          } else {
+            res.writeHead(401, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: "Invalid password" }));
+          }
+        } catch (err) {
+          console.error("Error in /api/admin-login:", err);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Bad request" }));
+        }
+      });
+      return;
+    }
+
+    // API: Update viewer progress
+    if (pathname === "/api/progress" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", async () => {
+        try {
+          const { viewerId, progress, watchTime, completed } = JSON.parse(body);
+          const data = await getData();
+          if (data.viewers[viewerId]) {
+            data.viewers[viewerId].progress = progress;
+            data.viewers[viewerId].watchTime = watchTime;
+            data.viewers[viewerId].completed = completed;
+            await saveData(data);
+          }
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ success: true }));
-        } else {
-          res.writeHead(401, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: false, error: "Invalid password" }));
+        } catch (err) {
+          console.error("Error in /api/progress:", err);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false }));
         }
-      } catch {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: false, error: "Bad request" }));
-      }
-    });
-    return;
-  }
-
-  // API: Update viewer progress
-  if (pathname === "/api/progress" && req.method === "POST") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", async () => {
-      try {
-        const { viewerId, progress, watchTime, completed } = JSON.parse(body);
-        const data = await getData();
-        if (data.viewers[viewerId]) {
-          data.viewers[viewerId].progress = progress;
-          data.viewers[viewerId].watchTime = watchTime;
-          data.viewers[viewerId].completed = completed;
-          await saveData(data);
-        }
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: true }));
-      } catch {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: false }));
-      }
-    });
-    return;
-  }
-
-  // API: Get viewers (admin)
-  if (pathname === "/api/viewers" && req.method === "GET") {
-    const data = await getData();
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(data.viewers));
-    return;
-  }
-
-  // API: Update PIN (admin)
-  if (pathname === "/api/update-pin" && req.method === "POST") {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", async () => {
-      try {
-        const { newPin } = JSON.parse(body);
-        const data = await getData();
-        data.viewerPin = newPin;
-        await saveData(data);
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: true }));
-      } catch {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: false }));
-      }
-    });
-    return;
-  }
-
-  // API: Upload video
-  if (pathname === "/api/upload" && req.method === "POST") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ success: true }));
-    return;
-  }
-
-  // Video file
-  if (pathname === "/video" && req.method === "GET") {
-    const videoPath = join(UPLOADS_DIR, "presentation.mp4");
-    if (existsSync(videoPath)) {
-      const stream = createReadStream(videoPath);
-      res.writeHead(200, { "Content-Type": "video/mp4" });
-      stream.pipe(res);
-    } else {
-      res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("Video not found");
+      });
+      return;
     }
-    return;
-  }
 
-  // Health check
-  if (pathname === "/health" && req.method === "GET") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok" }));
-    return;
-  }
+    // API: Get viewers (admin)
+    if (pathname === "/api/viewers" && req.method === "GET") {
+      const data = await getData();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(data.viewers));
+      return;
+    }
 
-  // 404
-  res.writeHead(404, { "Content-Type": "text/plain" });
-  res.end("Not Found");
+    // API: Update PIN (admin)
+    if (pathname === "/api/update-pin" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", async () => {
+        try {
+          const { newPin } = JSON.parse(body);
+          const data = await getData();
+          data.viewerPin = newPin;
+          await saveData(data);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: true }));
+        } catch (err) {
+          console.error("Error in /api/update-pin:", err);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false }));
+        }
+      });
+      return;
+    }
+
+    // API: Upload video
+    if (pathname === "/api/upload" && req.method === "POST") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true }));
+      return;
+    }
+
+    // Video file
+    if (pathname === "/video" && req.method === "GET") {
+      const videoPath = join(UPLOADS_DIR, "presentation.mp4");
+      if (existsSync(videoPath)) {
+        const stream = createReadStream(videoPath);
+        res.writeHead(200, { "Content-Type": "video/mp4" });
+        stream.pipe(res);
+      } else {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Video not found");
+      }
+      return;
+    }
+
+    // Health check
+    if (pathname === "/health" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
+    // 404
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not Found");
+  } catch (err) {
+    console.error(`Unhandled error for ${req.method} ${req.url}:`, err);
+    if (!res.headersSent) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    }
+  }
 });
 
 try {
