@@ -246,6 +246,19 @@ try {
 } catch (err) {
   console.error("Failed to initialize data:", err);
 }
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection:", reason);
+});
+
+process.on("exit", (code) => {
+  console.log("Process exiting with code:", code);
+});
+
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Présente running on port ${PORT}`);
 });
