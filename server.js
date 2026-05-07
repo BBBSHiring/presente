@@ -208,31 +208,56 @@ const server = createServer(async (req, res) => {
         const destPath = join(UPLOADS_DIR, "presentation.mp4");
         let fileReceived = false;
 
+        let writeStreamFinished = false;
+        let busboyFinished = false;
+        let writeStreamError = null;
+
+        function tryRespond() {
+          if (!busboyFinished || !writeStreamFinished) return;
+          if (res.headersSent) return;
+          if (writeStreamError) {
+            console.error("Error writing uploaded file:", writeStreamError);
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: "Failed to save file" }));
+            return;
+          }
+          if (fileReceived) {
+            console.log("File successfully written to disk:", destPath);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: true }));
+          } else {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: "No file provided" }));
+          }
+        }
+
         busboy.on("file", (_fieldname, fileStream, _info) => {
           fileReceived = true;
+          console.log("Receiving file, writing to:", destPath);
           const writeStream = createWriteStream(destPath);
           fileStream.pipe(writeStream);
 
+          writeStream.on("finish", () => {
+            console.log("writeStream finished, file fully written to disk");
+            writeStreamFinished = true;
+            tryRespond();
+          });
+
           writeStream.on("error", (err) => {
-            console.error("Error writing uploaded file:", err);
+            writeStreamError = err;
+            writeStreamFinished = true;
             fileStream.resume();
-            if (!res.headersSent) {
-              res.writeHead(500, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ success: false, error: "Failed to save file" }));
-            }
+            tryRespond();
           });
         });
 
         busboy.on("finish", () => {
-          if (!res.headersSent) {
-            if (fileReceived) {
-              res.writeHead(200, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ success: true }));
-            } else {
-              res.writeHead(400, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ success: false, error: "No file provided" }));
-            }
+          console.log("Busboy finished parsing upload");
+          busboyFinished = true;
+          if (!fileReceived) {
+            writeStreamFinished = true;
           }
+          tryRespond();
         });
 
         busboy.on("error", (err) => {
