@@ -13,8 +13,13 @@ const DATA_FILE = join(DATA_DIR, "data.json");
 const UPLOADS_DIR = join(DATA_DIR, "uploads");
 
 // Ensure directories exist
-await mkdir(DATA_DIR, { recursive: true });
-await mkdir(UPLOADS_DIR, { recursive: true });
+try {
+  await mkdir(DATA_DIR, { recursive: true });
+  await mkdir(UPLOADS_DIR, { recursive: true });
+  console.log("Data directories ready:", DATA_DIR, UPLOADS_DIR);
+} catch (err) {
+  console.error("Failed to create data directories:", err);
+}
 
 // Initialize data.json if it doesn't exist
 async function initData() {
@@ -210,12 +215,24 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Health check
+  if (pathname === "/health" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+
   // 404
   res.writeHead(404, { "Content-Type": "text/plain" });
   res.end("Not Found");
 });
 
-await initData();
+try {
+  await initData();
+  console.log("Data initialized successfully");
+} catch (err) {
+  console.error("Failed to initialize data:", err);
+}
 server.listen(PORT, () => {
   console.log(`Présente running on port ${PORT}`);
 });
