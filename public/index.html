@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Présente</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a1a; color: #fff; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .login-screen, .viewer-screen, .admin-screen { display: none; }
+    .login-screen.active, .viewer-screen.active, .admin-screen.active { display: block; }
+    
+    /* Login */
+    .login-screen { text-align: center; padding: 60px 20px; }
+    .login-screen h1 { font-size: 3em; margin-bottom: 40px; }
+    .login-form { max-width: 400px; margin: 0 auto; }
+    input, button { width: 100%; padding: 12px; margin: 10px 0; font-size: 1em; border: none; border-radius: 4px; }
+    input { background: #333; color: #fff; }
+    button { background: #0066cc; color: #fff; cursor: pointer; font-weight: bold; }
+    button:hover { background: #0052a3; }
+    .error { color: #ff6b6b; margin-top: 10px; }
+    .admin-link { margin-top: 20px; }
+    .admin-link a { color: #0066cc; text-decoration: none; cursor: pointer; }
+    
+    /* Viewer */
+    .viewer-screen { padding: 20px; }
+    .video-container { max-width: 100%; margin: 0 auto; }
+    video { width: 100%; height: auto; background: #000; }
+    .controls { margin-top: 20px; text-align: center; }
+    .progress-bar { width: 100%; height: 8px; background: #333; border-radius: 4px; margin: 10px 0; overflow: hidden; }
+    .progress-fill { height: 100%; background: #0066cc; width: 0%; }
+    .completion-banner { display: none; text-align: center; padding: 20px; background: #28a745; border-radius: 4px; margin-top: 20px; }
+    .completion-banner.show { display: block; }
+    
+    /* Admin */
+    .admin-screen { padding: 20px; }
+    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+    .admin-header h2 { font-size: 2em; }
+    .logout-btn { background: #dc3545; padding: 10px 20px; }
+    .upload-section { background: #222; padding: 20px; border-radius: 4px; margin-bottom: 30px; }
+    .upload-section h3 { margin-bottom: 15px; }
+    .upload-section input[type="file"] { margin-bottom: 10px; }
+    .pin-section { background: #222; padding: 20px; border-radius: 4px; margin-bottom: 30px; }
+    .pin-section h3 { margin-bottom: 15px; }
+    .pin-section input { max-width: 200px; }
+    .viewers-table { width: 100%; border-collapse: collapse; background: #222; }
+    .viewers-table th, .viewers-table td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+    .viewers-table th { background: #111; font-weight: bold; }
+    .viewers-table tr:hover { background: #2a2a2a; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Login Screen -->
+    <div class="login-screen active">
+      <h1>Présente</h1>
+      <div class="login-form">
+        <input type="text" id="viewerName" placeholder="Your name">
+        <input type="password" id="viewerPin" placeholder="PIN">
+        <button onclick="loginViewer()">Watch</button>
+        <div class="error" id="loginError"></div>
+        <div class="admin-link">
+          <a onclick="showAdminLogin()">Admin / presenter access</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Viewer Screen -->
+    <div class="viewer-screen">
+      <div class="video-container">
+        <video id="video" controls>
+          <source src="/video" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="controls">
+        <p id="watchTime">Watch time: 0:00</p>
+      </div>
+      <div class="completion-banner" id="completionBanner">
+        <h3>✓ Presentation Complete!</h3>
+        <p>Thank you for watching.</p>
+      </div>
+    </div>
+
+    <!-- Admin Screen -->
+    <div class="admin-screen">
+      <div class="admin-header">
+        <h2>Admin Dashboard</h2>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </div>
+
+      <div class="upload-section">
+        <h3>Upload Video</h3>
+        <input type="file" id="videoFile" accept="video/*">
+        <button onclick="uploadVideo()">Upload</button>
+      </div>
+
+      <div class="pin-section">
+        <h3>Viewer PIN</h3>
+        <input type="text" id="newPin" placeholder="New PIN">
+        <button onclick="updatePin()">Update PIN</button>
+      </div>
+
+      <h3>Viewers</h3>
+      <table class="viewers-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Login Time</th>
+            <th>Progress</th>
+            <th>Watch Time</th>
+            <th>Completed</th>
+          </tr>
+        </thead>
+        <tbody id="viewersTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let currentViewerId = null;
+    let videoElement = null;
+
+    async function loginViewer() {
+      const name = document.getElementById('viewerName').value;
+      const pin = document.getElementById('viewerPin').value;
+      const errorDiv = document.getElementById('loginError');
+
+      if (!name || !pin) {
+        errorDiv.textContent = 'Please enter name and PIN';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, pin })
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentViewerId = data.viewerId;
+          showViewerScreen();
+        } else {
+          errorDiv.textContent = data.error || 'Login failed';
+        }
+      } catch (err) {
+        errorDiv.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    function showAdminLogin() {
+      const password = prompt('Admin password:');
+      if (!password) return;
+
+      fetch('/api/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          showAdminScreen();
+        } else {
+          alert('Invalid password');
+        }
+      });
+    }
+
+    function showViewerScreen() {
+      document.querySelector('.login-screen').classList.remove('active');
+      document.querySelector('.viewer-screen').classList.add('active');
+      videoElement = document.getElementById('video');
+      setupVideoTracking();
+    }
+
+    function showAdminScreen() {
+      document.querySelector('.login-screen').classList.remove('active');
+      document.querySelector('.admin-screen').classList.add('active');
+      loadViewers();
+    }
+
+    function setupVideoTracking() {
+      videoElement.addEventListener('timeupdate', () => {
+        const progress = (videoElement.currentTime / videoElement.duration) * 100;
+        document.getElementById('progressFill').style.width = progress + '%';
+        document.getElementById('watchTime').textContent = `Watch time: ${formatTime(videoElement.currentTime)}`;
+
+        fetch('/api/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            viewerId: currentViewerId,
+            progress: Math.round(progress),
+            watchTime: Math.round(videoElement.currentTime),
+            completed: progress >= 95
+          })
+        });
+      });
+
+      videoElement.addEventListener('ended', () => {
+        document.getElementById('completionBanner').classList.add('show');
+      });
+    }
+
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    async function uploadVideo() {
+      const file = document.getElementById('videoFile').files[0];
+      if (!file) {
+        alert('Please select a file');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('video', file);
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          alert('Video uploaded successfully');
+          document.getElementById('videoFile').value = '';
+        } else {
+          alert('Upload failed');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function updatePin() {
+      const newPin = document.getElementById('newPin').value;
+      if (!newPin) {
+        alert('Please enter a PIN');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/update-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newPin })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('PIN updated');
+          document.getElementById('newPin').value = '';
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function loadViewers() {
+      try {
+        const res = await fetch('/api/viewers');
+        const viewers = await res.json();
+        const tbody = document.getElementById('viewersTable');
+        tbody.innerHTML = '';
+
+        for (const [id, viewer] of Object.entries(viewers)) {
+          const row = tbody.insertRow();
+          row.innerHTML = `
+            <td>${viewer.name}</td>
+            <td>${new Date(viewer.loginTime).toLocaleString()}</td>
+            <td>${viewer.progress}%</td>
+            <td>${formatTime(viewer.watchTime)}</td>
+            <td>${viewer.completed ? '✓' : '—'}</td>
+          `;
+        }
+      } catch (err) {
+        console.error('Error loading viewers:', err);
+      }
+    }
+
+    function logout() {
+      document.querySelector('.admin-screen').classList.remove('active');
+      document.querySelector('.login-screen').classList.add('active');
+    }
+  </script>
+</body>
+</html>
