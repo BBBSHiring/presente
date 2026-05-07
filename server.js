@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || "3000");
-const DATA_DIR = __dirname;
+const DATA_DIR = "/data";
 const DATA_FILE = join(DATA_DIR, "data.json");
 const UPLOADS_DIR = join(DATA_DIR, "uploads");
 
