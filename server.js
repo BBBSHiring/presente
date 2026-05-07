@@ -1,10 +1,11 @@
 import { createServer } from "http";
 import { readFile, writeFile, mkdir } from "fs/promises";
-import { existsSync } from "fs";
+import { existsSync, createWriteStream } from "fs";
 import { join, dirname } from "path";
 import { parse } from "url";
 import { createReadStream } from "fs";
 import { fileURLToPath } from "url";
+import Busboy from "busboy";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || "3000");
@@ -202,8 +203,54 @@ const server = createServer(async (req, res) => {
 
     // API: Upload video
     if (pathname === "/api/upload" && req.method === "POST") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ success: true }));
+      try {
+        const busboy = Busboy({ headers: req.headers });
+        const destPath = join(UPLOADS_DIR, "presentation.mp4");
+        let fileReceived = false;
+
+        busboy.on("file", (_fieldname, fileStream, _info) => {
+          fileReceived = true;
+          const writeStream = createWriteStream(destPath);
+          fileStream.pipe(writeStream);
+
+          writeStream.on("error", (err) => {
+            console.error("Error writing uploaded file:", err);
+            fileStream.resume();
+            if (!res.headersSent) {
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: false, error: "Failed to save file" }));
+            }
+          });
+        });
+
+        busboy.on("finish", () => {
+          if (!res.headersSent) {
+            if (fileReceived) {
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: true }));
+            } else {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: false, error: "No file provided" }));
+            }
+          }
+        });
+
+        busboy.on("error", (err) => {
+          console.error("Busboy error during upload:", err);
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: "Upload parsing failed" }));
+          }
+        });
+
+        req.pipe(busboy);
+      } catch (err) {
+        console.error("Error in /api/upload:", err);
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Upload failed" }));
+        }
+      }
       return;
     }
 
