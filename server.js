@@ -71,7 +71,7 @@ const server = createServer(async (req, res) => {
 
   // Root
   if (pathname === "/") {
-    return serveStatic(req, res, join(DATA_DIR, "public", "index.html"));
+    return serveStatic(req, res, join(__dirname, "public", "index.html"));
   }
 
   // API: Get data
