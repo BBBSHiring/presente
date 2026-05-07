@@ -1,12 +1,14 @@
 import { createServer } from "http";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { parse } from "url";
 import { createReadStream } from "fs";
+import { fileURLToPath } from "url";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || "3000");
-const DATA_DIR = "/app";
+const DATA_DIR = __dirname;
 const DATA_FILE = join(DATA_DIR, "data.json");
 const UPLOADS_DIR = join(DATA_DIR, "uploads");
 
