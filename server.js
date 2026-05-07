@@ -60,6 +60,7 @@ async function serveStatic(req, res, filePath) {
 
 // Main server
 const server = createServer(async (req, res) => {
+  console.log(`${req.method} ${req.url}`);
   const url = parse(req.url, true);
   const pathname = url.pathname;
 
